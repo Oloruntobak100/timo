@@ -25,6 +25,8 @@ import {
 import { EntitySwitcher } from '@/components/custom/EntitySwitcher';
 import { useActiveCompany } from '@/store/entityStore';
 import { useGuidanceStore } from '@/store/guidanceStore';
+import { useAuth } from '@/auth/AuthContext';
+import { useNavigate } from 'react-router-dom';
 
 // ============================================================================
 // NOTIFICATIONS MOCK DATA
@@ -77,6 +79,11 @@ interface HeaderProps {
 export const Header: React.FC<HeaderProps> = ({ onMenuToggle, isSidebarOpen }) => {
   const activeCompany = useActiveCompany();
   const { toggleGuidance, guidanceEnabled } = useGuidanceStore();
+  const { user, signOut } = useAuth();
+  const navigate = useNavigate();
+
+  const displayEmail = user?.email ?? '';
+  const displayName = user?.user_metadata?.full_name as string | undefined;
   
   const theme = activeCompany.theme;
   const unreadCount = NOTIFICATIONS.filter(n => !n.read).length;
@@ -245,9 +252,13 @@ export const Header: React.FC<HeaderProps> = ({ onMenuToggle, isSidebarOpen }) =
                 >
                   <User className="w-4 h-4 text-white" />
                 </div>
-                <div className="hidden sm:block text-left">
-                  <p className="text-sm font-medium text-white">Sarah Johnson</p>
-                  <p className="text-xs text-slate-400">Office Manager</p>
+                <div className="hidden sm:block text-left max-w-[160px]">
+                  <p className="text-sm font-medium text-white truncate" title={displayEmail}>
+                    {displayName || (displayEmail ? displayEmail.split('@')[0] : 'Account')}
+                  </p>
+                  <p className="text-xs text-slate-400 truncate" title={displayEmail}>
+                    {displayEmail || '—'}
+                  </p>
                 </div>
               </motion.button>
             </DropdownMenuTrigger>
@@ -265,12 +276,21 @@ export const Header: React.FC<HeaderProps> = ({ onMenuToggle, isSidebarOpen }) =
                 <User className="w-4 h-4 mr-2" />
                 Profile
               </DropdownMenuItem>
-              <DropdownMenuItem className="text-slate-300 cursor-pointer">
+              <DropdownMenuItem
+                className="text-slate-300 cursor-pointer"
+                onClick={() => navigate('/settings')}
+              >
                 <Settings className="w-4 h-4 mr-2" />
                 Settings
               </DropdownMenuItem>
               <DropdownMenuSeparator style={{ backgroundColor: 'rgba(71, 85, 105, 0.3)' }} />
-              <DropdownMenuItem className="text-red-400 cursor-pointer">
+              <DropdownMenuItem
+                className="text-red-400 cursor-pointer"
+                onClick={async () => {
+                  await signOut();
+                  navigate('/login', { replace: true });
+                }}
+              >
                 <LogOut className="w-4 h-4 mr-2" />
                 Log out
               </DropdownMenuItem>

@@ -7,7 +7,10 @@ import React, { useState, useEffect } from 'react';
 import { Routes, Route, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
+import { useAuth } from '@/auth/AuthContext';
 import { MainLayout } from '@/components/layout/MainLayout';
+import { SupabaseConfigMissing } from '@/components/auth/SupabaseConfigMissing';
+import { RequireAuth, GuestOnly } from '@/components/auth/RouteGuards';
 import Dashboard from '@/pages/Dashboard';
 import JobsPage from '@/pages/jobs/JobsPage';
 import JobDetailPage from '@/pages/jobs/JobDetailPage';
@@ -26,6 +29,8 @@ import CISReturnsPage from '@/pages/finance/CISReturnsPage';
 import ReportsPage from '@/pages/reports/ReportsPage';
 import SettingsPage from '@/pages/settings/SettingsPage';
 import WelcomeScreen from '@/components/WelcomeScreen';
+import LoginPage from '@/pages/auth/LoginPage';
+import SignUpPage from '@/pages/auth/SignUpPage';
 import { useEntityStore } from '@/store/entityStore';
 import { api } from '@/lib/api';
 
@@ -34,48 +39,72 @@ import { api } from '@/lib/api';
 // ============================================================================
 
 function App() {
+  const { isConfigured } = useAuth();
+
+  if (!isConfigured) {
+    return <SupabaseConfigMissing />;
+  }
+
+  return (
+    <Routes>
+      <Route
+        path="/login"
+        element={
+          <GuestOnly>
+            <LoginPage />
+          </GuestOnly>
+        }
+      />
+      <Route
+        path="/sign-up"
+        element={
+          <GuestOnly>
+            <SignUpPage />
+          </GuestOnly>
+        }
+      />
+      <Route element={<RequireAuth />}>
+        <Route path="/*" element={<AuthenticatedApp />} />
+      </Route>
+    </Routes>
+  );
+}
+
+function AuthenticatedApp() {
   const location = useLocation();
   const navigate = useNavigate();
   const [hasCompletedWelcome, setHasCompletedWelcome] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const { activeCompany, activeCompanyType } = useEntityStore();
-  
+
   const handleNavigate = (path: string) => {
     navigate(path);
   };
 
-  // Initialize app and check for saved session
   useEffect(() => {
     const init = async () => {
       try {
-        // Check if user has completed welcome before
         const saved = localStorage.getItem('phillips-welcome-completed');
         if (saved === 'true') {
           setHasCompletedWelcome(true);
         }
-        
-        // Test API connection
         await api.get('/health');
-      } catch (error) {
+      } catch {
         console.log('API not available, using mock data');
       } finally {
         setIsLoading(false);
       }
     };
-    
+
     init();
   }, []);
 
-  // Show entity switch notification when company changes
   useEffect(() => {
     if (hasCompletedWelcome) {
-      toast.info(
-        `Viewing ${activeCompany.shortName}`,
-        { 
-          description: `All data is now filtered for ${activeCompanyType === 'construction' ? 'Construction' : 'Environmental'} operations.`,
-          duration: 3000 
-        }
-      );
+      toast.info(`Viewing ${activeCompany.shortName}`, {
+        description: `All data is now filtered for ${activeCompanyType === 'construction' ? 'Construction' : 'Environmental'} operations.`,
+        duration: 3000,
+      });
     }
   }, [activeCompanyType, activeCompany, hasCompletedWelcome]);
 
@@ -92,16 +121,16 @@ function App() {
       <div className="min-h-screen bg-slate-950 flex items-center justify-center">
         <motion.div
           className="w-16 h-16 rounded-xl"
-          style={{ 
-            background: 'linear-gradient(135deg, #3B82F6 0%, #14B8A6 100%)' 
+          style={{
+            background: 'linear-gradient(135deg, #3B82F6 0%, #14B8A6 100%)',
           }}
-          animate={{ 
+          animate={{
             rotate: 360,
-            scale: [1, 1.1, 1]
+            scale: [1, 1.1, 1],
           }}
-          transition={{ 
+          transition={{
             rotate: { duration: 2, repeat: Infinity, ease: 'linear' },
-            scale: { duration: 1, repeat: Infinity }
+            scale: { duration: 1, repeat: Infinity },
           }}
         />
       </div>
@@ -122,41 +151,24 @@ function App() {
           exit={{ opacity: 0, y: -10 }}
           transition={{ duration: 0.2 }}
         >
-          <Routes location={location}>
-            {/* Dashboard */}
+          <Routes>
             <Route path="/" element={<Dashboard />} />
-            
-            {/* Jobs Module */}
             <Route path="/jobs" element={<JobsPage />} />
             <Route path="/jobs/:id" element={<JobDetailPage />} />
-            
-            {/* Customers Module */}
             <Route path="/customers/clients" element={<ClientsPage />} />
             <Route path="/customers/policy-holders" element={<PolicyHoldersPage />} />
-            
-            {/* Finance Module */}
             <Route path="/finance/invoices" element={<InvoicesPage />} />
             <Route path="/finance/receipts" element={<ReceiptsPage />} />
             <Route path="/finance/purchase-invoices" element={<PurchaseInvoicesPage />} />
             <Route path="/finance/cis-returns" element={<CISReturnsPage />} />
-            
-            {/* Workforce Module */}
             <Route path="/workforce/employees" element={<EmployeesPage />} />
             <Route path="/workforce/timesheets" element={<TimesheetsPage />} />
             <Route path="/workforce/labour" element={<LabourPage />} />
-            
-            {/* Planner Module */}
             <Route path="/planner" element={<PlannerPage />} />
-            
-            {/* Supply Chain Module */}
             <Route path="/supply-chain/suppliers" element={<SuppliersPage />} />
             <Route path="/supply-chain/subcontractors" element={<SubcontractorsPage />} />
-            
-            {/* Reports & Settings */}
             <Route path="/reports" element={<ReportsPage />} />
             <Route path="/settings" element={<SettingsPage />} />
-            
-            {/* 404 Fallback */}
             <Route path="*" element={<NotFoundPage />} />
           </Routes>
         </motion.div>
@@ -165,13 +177,9 @@ function App() {
   );
 }
 
-// ============================================================================
-// 404 PAGE
-// ============================================================================
-
 const NotFoundPage: React.FC = () => {
   const navigate = useNavigate();
-  
+
   return (
     <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
       <motion.div
@@ -179,10 +187,10 @@ const NotFoundPage: React.FC = () => {
         animate={{ scale: 1 }}
         transition={{ type: 'spring', stiffness: 200 }}
         className="text-8xl font-bold mb-4"
-        style={{ 
+        style={{
           background: 'linear-gradient(135deg, #3B82F6 0%, #14B8A6 100%)',
           WebkitBackgroundClip: 'text',
-          WebkitTextFillColor: 'transparent'
+          WebkitTextFillColor: 'transparent',
         }}
       >
         404
@@ -190,10 +198,11 @@ const NotFoundPage: React.FC = () => {
       <h2 className="text-2xl font-semibold text-white mb-2">Page Not Found</h2>
       <p className="text-slate-400 mb-6">The page you're looking for doesn't exist.</p>
       <button
+        type="button"
         onClick={() => navigate('/')}
         className="px-6 py-3 rounded-xl font-medium text-white transition-all"
-        style={{ 
-          background: 'linear-gradient(135deg, #3B82F6 0%, #14B8A6 100%)' 
+        style={{
+          background: 'linear-gradient(135deg, #3B82F6 0%, #14B8A6 100%)',
         }}
       >
         Return to Dashboard
