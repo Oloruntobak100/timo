@@ -23,6 +23,9 @@ type AuthContextValue = {
   loading: boolean;
   signInWithPassword: (email: string, password: string) => Promise<{ error: Error | null }>;
   signUpWithPassword: (email: string, password: string) => Promise<SignUpResult>;
+  /** Confirm signup using the code from the email (`type: signup` OTP). */
+  verifySignUpOtp: (email: string, token: string) => Promise<{ error: Error | null }>;
+  resendSignupEmail: (email: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
 };
 
@@ -89,6 +92,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return { error: null, pendingEmailVerification };
   }, []);
 
+  const verifySignUpOtp = useCallback(async (email: string, token: string) => {
+    if (!supabase) return { error: new Error('Supabase is not configured') };
+    const trimmed = token.trim();
+    if (!trimmed) {
+      return { error: new Error('Enter the verification code from your email') };
+    }
+    const { error } = await supabase.auth.verifyOtp({
+      email,
+      token: trimmed,
+      type: 'signup',
+    });
+    if (!error) return { error: null };
+    return { error: new Error(error.message) };
+  }, []);
+
+  const resendSignupEmail = useCallback(async (email: string) => {
+    if (!supabase) return { error: new Error('Supabase is not configured') };
+    const { error } = await supabase.auth.resend({
+      type: 'signup',
+      email,
+      options: { emailRedirectTo: `${window.location.origin}/login` },
+    });
+    if (!error) return { error: null };
+    return { error: new Error(error.message) };
+  }, []);
+
   const signOut = useCallback(async () => {
     if (!supabase) return;
     await supabase.auth.signOut();
@@ -102,9 +131,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       loading,
       signInWithPassword,
       signUpWithPassword,
+      verifySignUpOtp,
+      resendSignupEmail,
       signOut,
     }),
-    [session, loading, signInWithPassword, signUpWithPassword, signOut]
+    [session, loading, signInWithPassword, signUpWithPassword, verifySignUpOtp, resendSignupEmail, signOut]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

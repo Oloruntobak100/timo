@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import { Building2, Loader2 } from 'lucide-react';
@@ -18,15 +18,31 @@ import {
 } from '@/components/ui/card';
 
 export default function SignUpPage() {
-  const { signUpWithPassword, loading: authLoading } = useAuth();
+  const navigate = useNavigate();
+  const {
+    signUpWithPassword,
+    verifySignUpOtp,
+    resendSignupEmail,
+    loading: authLoading,
+  } = useAuth();
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [verifySentTo, setVerifySentTo] = useState<string | null>(null);
+  const [verificationCode, setVerificationCode] = useState('');
+  const [verifying, setVerifying] = useState(false);
+  const [resending, setResending] = useState(false);
   const [createdWithoutVerificationStep, setCreatedWithoutVerificationStep] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const resetVerificationFlow = () => {
+    setVerifySentTo(null);
+    setVerificationCode('');
+    setCreatedWithoutVerificationStep(false);
+  };
+
+  const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     const parsed = validateAuthEmail(email);
     if (parsed.ok === false) {
@@ -47,6 +63,7 @@ export default function SignUpPage() {
     }
     setSubmitting(true);
     setVerifySentTo(null);
+    setVerificationCode('');
     setCreatedWithoutVerificationStep(false);
     const { error, pendingEmailVerification } = await signUpWithPassword(parsed.email, password);
     setSubmitting(false);
@@ -56,7 +73,7 @@ export default function SignUpPage() {
     }
     if (pendingEmailVerification) {
       setVerifySentTo(parsed.email);
-      toast.success('Verification email sent');
+      toast.success('Check your email for a verification code');
       return;
     }
     setCreatedWithoutVerificationStep(true);
@@ -65,6 +82,37 @@ export default function SignUpPage() {
         'Turn on “Confirm email” in Supabase (Auth → Providers → Email) so new users must verify before signing in.',
       duration: 8000,
     });
+  };
+
+  const handleVerifyCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!verifySentTo) return;
+    const code = verificationCode.trim();
+    if (!code) {
+      toast.error('Paste the verification code from your email');
+      return;
+    }
+    setVerifying(true);
+    const { error } = await verifySignUpOtp(verifySentTo, code);
+    setVerifying(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success('Email verified — you’re signed in');
+    navigate('/', { replace: true });
+  };
+
+  const handleResend = async () => {
+    if (!verifySentTo) return;
+    setResending(true);
+    const { error } = await resendSignupEmail(verifySentTo);
+    setResending(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success('Email sent again');
   };
 
   return (
@@ -87,25 +135,25 @@ export default function SignUpPage() {
 
         <Card className="border-slate-800 bg-slate-900/80 backdrop-blur">
           <CardHeader>
-            <CardTitle className="text-white text-2xl">Create account</CardTitle>
+            <CardTitle className="text-white text-2xl">
+              {verifySentTo ? 'Enter verification code' : 'Create account'}
+            </CardTitle>
             <CardDescription className="text-slate-400">
-              Use a valid email. You must confirm it via the link Supabase sends before you can sign in (when “Confirm
-              email” is enabled in your project).
+              {verifySentTo ? (
+                <>
+                  We sent a code to <span className="text-slate-300">{verifySentTo}</span>. Paste the full value from
+                  your email (any length). You can also use the link in the email if you prefer.
+                </>
+              ) : (
+                <>
+                  Use a valid email and password. When email confirmation is on, you’ll verify with a code from
+                  Supabase.
+                </>
+              )}
             </CardDescription>
           </CardHeader>
-          {verifySentTo && (
-            <div className="px-6 pb-2 space-y-2">
-              <p className="text-sm text-teal-400/90 rounded-lg border border-teal-500/30 bg-teal-500/10 px-3 py-2">
-                We sent a verification link to <span className="font-medium text-white">{verifySentTo}</span>. Open it,
-                then{' '}
-                <Link to="/login" className="text-teal-300 underline underline-offset-2">
-                  sign in
-                </Link>
-                .
-              </p>
-            </div>
-          )}
-          {createdWithoutVerificationStep && (
+
+          {createdWithoutVerificationStep && !verifySentTo && (
             <div className="px-6 pb-2">
               <p className="text-sm text-amber-400/90 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2">
                 Your project allowed sign-up without a confirmation step. Enable <strong>Confirm email</strong> in
@@ -113,82 +161,162 @@ export default function SignUpPage() {
               </p>
             </div>
           )}
-          <form onSubmit={handleSubmit}>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="signup-email" className="text-slate-300">
-                  Email
-                </Label>
-                <Input
-                  id="signup-email"
-                  type="email"
-                  autoComplete="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="bg-slate-950/50 border-slate-700 text-white"
+
+          {verifySentTo ? (
+            <form onSubmit={handleVerifyCode}>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="verification-code" className="text-slate-300">
+                    Verification code
+                  </Label>
+                  <Input
+                    id="verification-code"
+                    name="verification-code"
+                    type="text"
+                    autoComplete="one-time-code"
+                    placeholder="Paste the code from your email"
+                    value={verificationCode}
+                    onChange={(e) => setVerificationCode(e.target.value)}
+                    className="bg-slate-950/50 border-slate-700 text-white font-mono text-base"
+                    disabled={verifying || authLoading}
+                    spellCheck={false}
+                  />
+                  <p className="text-xs text-slate-500">
+                    Paste exactly what appears in the email. Not limited to numbers or length.
+                  </p>
+                </div>
+              </CardContent>
+              <CardFooter className="flex flex-col gap-3">
+                <Button
+                  type="submit"
+                  className="w-full text-white border-0"
+                  style={{
+                    background: 'linear-gradient(135deg, #3B82F6 0%, #14B8A6 100%)',
+                  }}
+                  disabled={verifying || authLoading}
+                >
+                  {verifying ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Verifying…
+                    </>
+                  ) : (
+                    'Verify email'
+                  )}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full border-slate-600 text-slate-200 hover:bg-slate-800"
+                  disabled={resending || authLoading}
+                  onClick={handleResend}
+                >
+                  {resending ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Sending…
+                    </>
+                  ) : (
+                    'Resend email'
+                  )}
+                </Button>
+                <button
+                  type="button"
+                  className="text-sm text-slate-400 hover:text-slate-300 underline underline-offset-2"
+                  onClick={resetVerificationFlow}
+                >
+                  Use a different email
+                </button>
+                <p className="text-sm text-slate-400 text-center pt-1">
+                  <Link to="/login" className="text-blue-400 hover:text-blue-300 font-medium">
+                    Already verified? Sign in
+                  </Link>
+                </p>
+                <p className="text-xs text-slate-600 text-center">
+                  <Link to="/" className="hover:text-slate-400">
+                    ← Back to home
+                  </Link>
+                </p>
+              </CardFooter>
+            </form>
+          ) : (
+            <form onSubmit={handleSignUp}>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="signup-email" className="text-slate-300">
+                    Email
+                  </Label>
+                  <Input
+                    id="signup-email"
+                    type="email"
+                    autoComplete="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="bg-slate-950/50 border-slate-700 text-white"
+                    disabled={submitting || authLoading}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="signup-password" className="text-slate-300">
+                    Password
+                  </Label>
+                  <Input
+                    id="signup-password"
+                    type="password"
+                    autoComplete="new-password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="bg-slate-950/50 border-slate-700 text-white"
+                    disabled={submitting || authLoading}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="signup-confirm" className="text-slate-300">
+                    Confirm password
+                  </Label>
+                  <Input
+                    id="signup-confirm"
+                    type="password"
+                    autoComplete="new-password"
+                    value={confirm}
+                    onChange={(e) => setConfirm(e.target.value)}
+                    className="bg-slate-950/50 border-slate-700 text-white"
+                    disabled={submitting || authLoading}
+                  />
+                </div>
+              </CardContent>
+              <CardFooter className="flex flex-col gap-4">
+                <Button
+                  type="submit"
+                  className="w-full text-white border-0"
+                  style={{
+                    background: 'linear-gradient(135deg, #3B82F6 0%, #14B8A6 100%)',
+                  }}
                   disabled={submitting || authLoading}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="signup-password" className="text-slate-300">
-                  Password
-                </Label>
-                <Input
-                  id="signup-password"
-                  type="password"
-                  autoComplete="new-password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="bg-slate-950/50 border-slate-700 text-white"
-                  disabled={submitting || authLoading}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="signup-confirm" className="text-slate-300">
-                  Confirm password
-                </Label>
-                <Input
-                  id="signup-confirm"
-                  type="password"
-                  autoComplete="new-password"
-                  value={confirm}
-                  onChange={(e) => setConfirm(e.target.value)}
-                  className="bg-slate-950/50 border-slate-700 text-white"
-                  disabled={submitting || authLoading}
-                />
-              </div>
-            </CardContent>
-            <CardFooter className="flex flex-col gap-4">
-              <Button
-                type="submit"
-                className="w-full text-white border-0"
-                style={{
-                  background: 'linear-gradient(135deg, #3B82F6 0%, #14B8A6 100%)',
-                }}
-                disabled={submitting || authLoading}
-              >
-                {submitting ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Creating…
-                  </>
-                ) : (
-                  'Sign up'
-                )}
-              </Button>
-              <p className="text-sm text-slate-400 text-center">
-                Already have an account?{' '}
-                <Link to="/login" className="text-blue-400 hover:text-blue-300 font-medium">
-                  Sign in
-                </Link>
-              </p>
-              <p className="text-xs text-slate-600 text-center">
-                <Link to="/" className="hover:text-slate-400">
-                  ← Back to home
-                </Link>
-              </p>
-            </CardFooter>
-          </form>
+                >
+                  {submitting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Creating…
+                    </>
+                  ) : (
+                    'Sign up'
+                  )}
+                </Button>
+                <p className="text-sm text-slate-400 text-center">
+                  Already have an account?{' '}
+                  <Link to="/login" className="text-blue-400 hover:text-blue-300 font-medium">
+                    Sign in
+                  </Link>
+                </p>
+                <p className="text-xs text-slate-600 text-center">
+                  <Link to="/" className="hover:text-slate-400">
+                    ← Back to home
+                  </Link>
+                </p>
+              </CardFooter>
+            </form>
+          )}
         </Card>
       </motion.div>
     </div>
