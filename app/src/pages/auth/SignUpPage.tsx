@@ -182,6 +182,11 @@ export default function SignUpPage() {
                   Sign in
                 </Link>
               </p>
+              <p className="text-xs text-slate-600 text-center">
+                <Link to="/" className="hover:text-slate-400">
+                  ← Back to home
+                </Link>
+              </p>
             </CardFooter>
           </form>
         </Card>

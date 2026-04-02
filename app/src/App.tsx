@@ -31,6 +31,7 @@ import SettingsPage from '@/pages/settings/SettingsPage';
 import WelcomeScreen from '@/components/WelcomeScreen';
 import LoginPage from '@/pages/auth/LoginPage';
 import SignUpPage from '@/pages/auth/SignUpPage';
+import PublicLandingPage from '@/pages/auth/PublicLandingPage';
 import { useEntityStore } from '@/store/entityStore';
 import { api } from '@/lib/api';
 
@@ -63,6 +64,7 @@ function App() {
           </GuestOnly>
         }
       />
+      <Route path="/" element={<HomeEntry />} />
       <Route element={<RequireAuth />}>
         <Route path="/*" element={<AuthenticatedApp />} />
       </Route>
@@ -175,6 +177,30 @@ function AuthenticatedApp() {
       </AnimatePresence>
     </MainLayout>
   );
+}
+
+/** Root URL: public landing for guests, full app shell for signed-in users. */
+function HomeEntry() {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+        <div
+          className="w-16 h-16 rounded-xl animate-pulse"
+          style={{
+            background: 'linear-gradient(135deg, #3B82F6 0%, #14B8A6 100%)',
+          }}
+        />
+      </div>
+    );
+  }
+
+  if (user) {
+    return <AuthenticatedApp />;
+  }
+
+  return <PublicLandingPage />;
 }
 
 const NotFoundPage: React.FC = () => {
