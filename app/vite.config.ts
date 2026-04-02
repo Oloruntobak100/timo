@@ -14,7 +14,8 @@ export default defineConfig(({ mode }) => {
   }
 
   return {
-    base: "./",
+    // Root URL so deep links (/login, /sign-up) load JS/CSS from /assets/* on Vercel (not /sign-up/assets/*).
+    base: "/",
     envDir: appDir,
     plugins: [react()],
     resolve: {
