@@ -1,0 +1,22 @@
+# Dependencies
+node_modules/
+
+# Build
+dist/
+build/
+*.local
+
+# Environment
+.env
+.env.*
+
+# Logs & OS
+*.log
+.DS_Store
+Thumbs.db
+
+# IDE / local (optional)
+.cursor/
+
+# Vite
+*.tsbuildinfo
