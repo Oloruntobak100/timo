@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import { Building2, Loader2 } from 'lucide-react';
 import { useAuth } from '@/auth/AuthContext';
+import { validateAuthEmail } from '@/lib/emailAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -22,11 +23,18 @@ export default function SignUpPage() {
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [verifySentTo, setVerifySentTo] = useState<string | null>(null);
+  const [createdWithoutVerificationStep, setCreatedWithoutVerificationStep] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email.trim() || !password) {
-      toast.error('Enter email and password');
+    const parsed = validateAuthEmail(email);
+    if (parsed.ok === false) {
+      toast.error(parsed.message);
+      return;
+    }
+    if (!password) {
+      toast.error('Enter a password');
       return;
     }
     if (password.length < 6) {
@@ -38,13 +46,25 @@ export default function SignUpPage() {
       return;
     }
     setSubmitting(true);
-    const { error } = await signUpWithPassword(email.trim(), password);
+    setVerifySentTo(null);
+    setCreatedWithoutVerificationStep(false);
+    const { error, pendingEmailVerification } = await signUpWithPassword(parsed.email, password);
     setSubmitting(false);
     if (error) {
       toast.error(error.message);
       return;
     }
-    toast.success('Check your email to confirm your account, then sign in.');
+    if (pendingEmailVerification) {
+      setVerifySentTo(parsed.email);
+      toast.success('Verification email sent');
+      return;
+    }
+    setCreatedWithoutVerificationStep(true);
+    toast.success('Account created', {
+      description:
+        'Turn on “Confirm email” in Supabase (Auth → Providers → Email) so new users must verify before signing in.',
+      duration: 8000,
+    });
   };
 
   return (
@@ -69,9 +89,30 @@ export default function SignUpPage() {
           <CardHeader>
             <CardTitle className="text-white text-2xl">Create account</CardTitle>
             <CardDescription className="text-slate-400">
-              You will receive a confirmation email if required by your project settings
+              Use a valid email. You must confirm it via the link Supabase sends before you can sign in (when “Confirm
+              email” is enabled in your project).
             </CardDescription>
           </CardHeader>
+          {verifySentTo && (
+            <div className="px-6 pb-2 space-y-2">
+              <p className="text-sm text-teal-400/90 rounded-lg border border-teal-500/30 bg-teal-500/10 px-3 py-2">
+                We sent a verification link to <span className="font-medium text-white">{verifySentTo}</span>. Open it,
+                then{' '}
+                <Link to="/login" className="text-teal-300 underline underline-offset-2">
+                  sign in
+                </Link>
+                .
+              </p>
+            </div>
+          )}
+          {createdWithoutVerificationStep && (
+            <div className="px-6 pb-2">
+              <p className="text-sm text-amber-400/90 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2">
+                Your project allowed sign-up without a confirmation step. Enable <strong>Confirm email</strong> in
+                Supabase so every user must validate their email before signing in.
+              </p>
+            </div>
+          )}
           <form onSubmit={handleSubmit}>
             <CardContent className="space-y-4">
               <div className="space-y-2">

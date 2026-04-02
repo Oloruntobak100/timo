@@ -8,6 +8,13 @@ import React, {
 } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
+import { mapSignInError } from '@/lib/authMessages';
+
+export type SignUpResult = {
+  error: Error | null;
+  /** True when the user must confirm email before sign-in (Supabase “Confirm email” enabled). */
+  pendingEmailVerification: boolean;
+};
 
 type AuthContextValue = {
   isConfigured: boolean;
@@ -15,7 +22,7 @@ type AuthContextValue = {
   user: User | null;
   loading: boolean;
   signInWithPassword: (email: string, password: string) => Promise<{ error: Error | null }>;
-  signUpWithPassword: (email: string, password: string) => Promise<{ error: Error | null }>;
+  signUpWithPassword: (email: string, password: string) => Promise<SignUpResult>;
   signOut: () => Promise<void>;
 };
 
@@ -56,17 +63,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signInWithPassword = useCallback(async (email: string, password: string) => {
     if (!supabase) return { error: new Error('Supabase is not configured') };
     const { error } = await supabase.auth.signInWithPassword({ email, password });
-    return { error: error ? new Error(error.message) : null };
+    if (!error) return { error: null };
+    return { error: new Error(mapSignInError(error)) };
   }, []);
 
   const signUpWithPassword = useCallback(async (email: string, password: string) => {
-    if (!supabase) return { error: new Error('Supabase is not configured') };
-    const { error } = await supabase.auth.signUp({
+    if (!supabase) {
+      return { error: new Error('Supabase is not configured'), pendingEmailVerification: false };
+    }
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      options: { emailRedirectTo: `${window.location.origin}/` },
+      options: { emailRedirectTo: `${window.location.origin}/login` },
     });
-    return { error: error ? new Error(error.message) : null };
+    if (error) {
+      return { error: new Error(error.message), pendingEmailVerification: false };
+    }
+
+    // Never enter the app from sign-up alone: user must complete email verification (when enabled) and sign in explicitly.
+    if (data.session) {
+      await supabase.auth.signOut();
+    }
+
+    const pendingEmailVerification = Boolean(data.user && !data.user.email_confirmed_at);
+    return { error: null, pendingEmailVerification };
   }, []);
 
   const signOut = useCallback(async () => {

@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import { Building2, Loader2 } from 'lucide-react';
 import { useAuth } from '@/auth/AuthContext';
+import { validateAuthEmail } from '@/lib/emailAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -28,12 +29,17 @@ export default function LoginPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email.trim() || !password) {
-      toast.error('Enter email and password');
+    const parsed = validateAuthEmail(email);
+    if (parsed.ok === false) {
+      toast.error(parsed.message);
+      return;
+    }
+    if (!password) {
+      toast.error('Enter your password');
       return;
     }
     setSubmitting(true);
-    const { error } = await signInWithPassword(email.trim(), password);
+    const { error } = await signInWithPassword(parsed.email, password);
     setSubmitting(false);
     if (error) {
       toast.error(error.message);
@@ -65,7 +71,7 @@ export default function LoginPage() {
           <CardHeader>
             <CardTitle className="text-white text-2xl">Sign in</CardTitle>
             <CardDescription className="text-slate-400">
-              Use your Phillips Data Stream account
+              Only accounts that already exist in Supabase can sign in. Use a valid email address.
             </CardDescription>
           </CardHeader>
           <form onSubmit={handleSubmit}>
